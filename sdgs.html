@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SDGs 性別平權</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap');
+
+        body {
+            font-family: 'Nunito', 'Microsoft JhengHei', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #a7f3d0; /* 綠色草地底色 */
+        }
+
+        /* 村莊地圖背景裝飾 (泥土小徑) */
+        .village-map {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-image: 
+                radial-gradient(circle at 50% 50%, #d4a373 0%, transparent 40%),
+                radial-gradient(circle at 20% 70%, #d4a373 0%, transparent 30%),
+                radial-gradient(circle at 80% 30%, #d4a373 0%, transparent 30%);
+            background-size: cover;
+        }
+
+        /* 茅草屋特效 */
+        .hut {
+            position: absolute;
+            font-size: 4rem;
+            cursor: pointer;
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275), filter 0.3s;
+            filter: drop-shadow(0 10px 8px rgba(0, 0, 0, 0.2));
+            user-select: none;
+            /* 讓觸控區域變大，方便點擊 */
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .hut:hover {
+            transform: scale(1.15) translateY(-5px);
+        }
+
+        .hut.answered {
+            cursor: not-allowed;
+            filter: grayscale(100%) opacity(50%);
+            transform: scale(0.9);
+        }
+
+        .hut.answered::after {
+            content: '✔️';
+            position: absolute;
+            font-size: 2rem;
+            top: -10px;
+            right: 0;
+            color: #10b981;
+            filter: drop-shadow(0 2px 2px rgba(255,255,255,1));
+        }
+
+        /* 對話框彈出動畫 */
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.8) translateY(20px); }
+            100% { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .modal-animate {
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        /* 雲朵裝飾 */
+        .cloud {
+            position: absolute;
+            font-size: 5rem;
+            opacity: 0.8;
+            pointer-events: none;
+            animation: floatCloud 40s linear infinite;
+        }
+        @keyframes floatCloud {
+            from { left: -10%; }
+            to { left: 110%; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 頁首 UI -->
+    <header class="absolute top-0 w-full p-4 flex justify-between items-center z-10 pointer-events-none">
+        <h1 class="text-3xl md:text-5xl font-black text-white drop-shadow-[0_4px_4px_rgba(0,0,0,0.4)] stroke-black tracking-wider bg-green-600/80 px-6 py-2 rounded-full border-4 border-white shadow-lg pointer-events-auto">
+            SDGs 性別平權
+        </h1>
+        <div class="text-2xl md:text-3xl font-bold text-white bg-blue-600/80 px-6 py-2 rounded-full border-4 border-white shadow-lg drop-shadow-[0_4px_4px_rgba(0,0,0,0.4)] pointer-events-auto">
+            答對題數：<span id="score-display" class="text-yellow-300">0</span> / 10
+        </div>
+    </header>
+
+    <!-- 村莊地圖場景 -->
+    <main class="village-map" id="map-container">
+        <!-- 裝飾性雲朵 -->
+        <div class="cloud" style="top: 10%; animation-duration: 45s; font-size: 6rem;">☁️</div>
+        <div class="cloud" style="top: 30%; animation-duration: 60s; animation-delay: -20s;">☁️</div>
+        <div class="cloud" style="top: 60%; animation-duration: 50s; animation-delay: -10s; font-size: 4rem;">☁️</div>
+        <!-- 茅草屋由 JS 生成 -->
+    </main>
+
+    <!-- 題目對話框 (預設隱藏) -->
+    <div id="question-modal" class="fixed inset-0 bg-black/60 z-40 hidden flex justify-center items-center backdrop-blur-sm">
+        <div class="bg-white rounded-3xl p-8 max-w-xl w-11/12 shadow-2xl border-8 border-yellow-400 modal-animate">
+            <h2 class="text-2xl font-bold text-gray-800 mb-6 text-center" id="question-text">題目載入中...</h2>
+            <div id="options-container" class="space-y-4">
+                <!-- 選項按鈕由 JS 生成 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 遊戲結束對話框 (預設隱藏) -->
+    <div id="end-modal" class="fixed inset-0 bg-black/70 z-50 hidden flex justify-center items-center backdrop-blur-md">
+        <div class="bg-white rounded-3xl p-10 max-w-lg w-11/12 shadow-2xl border-8 border-green-500 modal-animate text-center">
+            <div id="end-icon" class="text-7xl mb-4">🏆</div>
+            <h2 id="end-title" class="text-4xl font-black mb-4"></h2>
+            <p id="end-message" class="text-xl text-gray-700 mb-8 font-bold"></p>
+            <button id="end-button" class="text-2xl font-bold text-white py-4 px-10 rounded-full shadow-lg transition-transform transform hover:scale-110 active:scale-95">
+                按鈕文字
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 題庫設計 (SDGs 5 性別平權)
+        const questions = [
+            { q: "什麼是 SDGs 目標 5 的主要內容？", options: ["消除貧窮", "氣候行動", "實現性別平權，並賦予婦女權力", "保育海洋生態"], ans: 2 },
+            { q: "下列哪一項是生活中落實「性別平權」的表現？", options: ["男主外，女主內", "家事由全家人共同分擔", "只有女生可以玩洋娃娃", "只有男生可以當工程師"], ans: 1 },
+            { q: "什麼是「同工同酬」？", options: ["相同工作，男性薪水較高", "相同工作，無論性別應獲得同等報酬", "相同工作，女性薪水較高", "根據年齡決定薪水"], ans: 1 },
+            { q: "在學校中，哪種行為違反了性別平權？", options: ["鼓勵女生參加科學社團", "嘲笑男生喜歡粉紅色", "尊重每個人的興趣", "男生女生都可以當班長"], ans: 1 },
+            { q: "聯合國提倡的「性別平權」不僅保障女性，還包含誰？", options: ["只有成年女性", "只有女童", "所有的性別，消除一切形式的歧視", "只有母親"], ans: 2 },
+            { q: "面對職場上的性別歧視，我們應該怎麼做？", options: ["默默忍受", "勇敢發聲並尋求合法管道申訴", "認為這是正常的社會現象", "離職逃避"], ans: 1 },
+            { q: "下列哪一種觀念有助於打破「性別刻板印象」？", options: ["護理師都是女生", "男生不能哭", "職業不分性別，看的是能力與興趣", "女生數學一定比較差"], ans: 2 },
+            { q: "全球仍有許多女孩無法上學，主要原因通常包含什麼？", options: ["女孩不想上學", "傳統重男輕女觀念及貧窮", "學校不收女生", "女孩不需要學習"], ans: 1 },
+            { q: "哪一項法規是台灣為了保障校園性別平權而設立的？", options: ["勞動基準法", "性別平等教育法", "環境保護法", "道路交通管理處罰條例"], ans: 1 },
+            { q: "推動性別平權對社會有什麼好處？", options: ["造成社會對立", "促進經濟成長與社會和諧", "讓特定性別受害", "沒有任何影響"], ans: 1 }
+        ];
+
+        // 遊戲狀態
+        let currentScore = 0;
+        let answeredCount = 0;
+        let currentHutIndex = null;
+
+        // 茅草屋的位置 (百分比，確保散佈在畫面上)
+        const hutPositions = [
+            { top: '25%', left: '15%' }, { top: '20%', left: '45%' }, { top: '30%', left: '75%' },
+            { top: '50%', left: '25%' }, { top: '45%', left: '55%' }, { top: '55%', left: '85%' },
+            { top: '75%', left: '15%' }, { top: '70%', left: '40%' }, { top: '80%', left: '65%' },
+            { top: '65%', left: '85%' }
+        ];
+
+        // 初始化遊戲
+        function initGame() {
+            const mapContainer = document.getElementById('map-container');
+            
+            // 打亂題目順序，增加可玩性
+            questions.sort(() => Math.random() - 0.5);
+
+            hutPositions.forEach((pos, index) => {
+                const hut = document.createElement('div');
+                hut.className = 'hut';
+                hut.innerHTML = '🛖';
+                hut.style.top = pos.top;
+                hut.style.left = pos.left;
+                // 添加隨機的些微延遲動畫感
+                hut.style.animation = `popIn 0.5s ease-out ${index * 0.1}s backwards`;
+                
+                hut.addEventListener('click', () => openQuestion(index, hut));
+                mapContainer.appendChild(hut);
+            });
+        }
+
+        // 打開題目對話框
+        function openQuestion(index, hutElement) {
+            // 如果已經答過就不理會
+            if (hutElement.classList.contains('answered')) return;
+
+            currentHutIndex = index;
+            const qData = questions[index];
+            
+            document.getElementById('question-text').innerText = `Q${index + 1}: ${qData.q}`;
+            const optionsContainer = document.getElementById('options-container');
+            optionsContainer.innerHTML = ''; // 清空選項
+
+            qData.options.forEach((opt, optIndex) => {
+                const btn = document.createElement('button');
+                btn.className = "w-full text-left bg-blue-100 hover:bg-blue-500 hover:text-white text-blue-900 font-bold py-4 px-6 rounded-xl transition-colors duration-200 border-2 border-blue-200 shadow-sm text-lg";
+                btn.innerText = opt;
+                btn.onclick = () => handleAnswer(optIndex, qData.ans, hutElement);
+                optionsContainer.appendChild(btn);
+            });
+
+            // 顯示 Modal
+            const modal = document.getElementById('question-modal');
+            modal.classList.remove('hidden');
+        }
+
+        // 處理作答邏輯
+        function handleAnswer(selectedIndex, correctIndex, hutElement) {
+            if (selectedIndex === correctIndex) {
+                currentScore++;
+                document.getElementById('score-display').innerText = currentScore;
+            }
+
+            // 標記該茅草屋為已作答
+            hutElement.classList.add('answered');
+            answeredCount++;
+
+            // 關閉 Modal
+            document.getElementById('question-modal').classList.add('hidden');
+
+            // 檢查是否結束遊戲
+            if (answeredCount === questions.length) {
+                setTimeout(checkGameEnd, 500); // 延遲半秒顯示結束畫面，讓玩家看清最後一題的變化
+            }
+        }
+
+        // 判定遊戲結束
+        function checkGameEnd() {
+            const endModal = document.getElementById('end-modal');
+            const endTitle = document.getElementById('end-title');
+            const endMessage = document.getElementById('end-message');
+            const endButton = document.getElementById('end-button');
+            const endIcon = document.getElementById('end-icon');
+
+            endModal.classList.remove('hidden');
+
+            if (currentScore >= 8) {
+                // 過關
+                endIcon.innerText = "🌟🏆🌟";
+                endTitle.innerText = "恭喜過關！任務成功！";
+                endTitle.className = "text-4xl font-black mb-4 text-green-600";
+                endModal.children[0].classList.replace('border-red-500', 'border-green-500');
+                endMessage.innerText = `太棒了！您總共答對了 ${currentScore} 題，完全掌握了性別平權的知識。`;
+                
+                endButton.innerText = "前往下一關";
+                endButton.className = "text-2xl font-bold text-white py-4 px-10 rounded-full shadow-lg bg-green-500 hover:bg-green-600 transition-transform transform hover:scale-110 active:scale-95";
+                endButton.onclick = () => {
+                    window.location.href = 'level2.html';
+                };
+            } else {
+                // 失敗
+                endIcon.innerText = "💪💦";
+                endTitle.innerText = "挑戰失敗，請再接再厲！";
+                endTitle.className = "text-4xl font-black mb-4 text-red-500";
+                endModal.children[0].classList.replace('border-green-500', 'border-red-500');
+                endMessage.innerText = `很可惜，您答對了 ${currentScore} 題，距離過關門檻(8題)還差一點。`;
+                
+                endButton.innerText = "重新挑戰";
+                endButton.className = "text-2xl font-bold text-white py-4 px-10 rounded-full shadow-lg bg-red-500 hover:bg-red-600 transition-transform transform hover:scale-110 active:scale-95";
+                endButton.onclick = () => {
+                    location.reload();
+                };
+            }
+        }
+
+        // 啟動遊戲
+        window.onload = initGame;
+
+    </script>
+</body>
+</html>
